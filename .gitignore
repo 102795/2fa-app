@@ -1,0 +1,12 @@
+# User data created at runtime – do not commit
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.env
