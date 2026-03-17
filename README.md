@@ -1,14 +1,14 @@
 # 2FA App
 
-A simple Python 2FA web app with a user interface to:
+A simple Python desktop GUI app to:
 
 - Create an account
 - Log in
-- Open a dashboard
+- Open a desktop dashboard
 - Enter a TOTP security key
-- View current 2FA codes
+- View current 2FA codes and expiration time
 
-The app is built with Streamlit and uses SQLite for account storage.
+The app uses Tkinter for the GUI and SQLite for account storage.
 
 ## Requirements
 
@@ -25,10 +25,10 @@ pip install -r requirements.txt
 2. Start the app:
 
 ```bash
-streamlit run app.py
+python app.py
 ```
 
-3. Open the URL shown in the terminal (usually `http://localhost:8501`).
+3. Use the desktop window to create accounts, log in, and generate TOTP codes.
 
 ## Notes
 

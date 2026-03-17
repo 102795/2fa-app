@@ -4,10 +4,12 @@ import hmac
 import secrets
 import sqlite3
 import time
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox
+from tkinter import ttk
 
 import pyotp
-import streamlit as st
 
 DB_PATH = Path(__file__).parent / "users.db"
 
@@ -74,92 +76,153 @@ def verify_user(username: str, password: str) -> bool:
     return hmac.compare_digest(saved_hash, candidate_hash)
 
 
-def render_auth_page() -> None:
-    st.title("2FA App")
-    st.caption("Create an account or log in to access your 2FA dashboard.")
+class TwoFAApp(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("2FA App")
+        self.geometry("420x380")
+        self.resizable(False, False)
 
-    signup_tab, login_tab = st.tabs(["Create Account", "Log In"])
+        self.username = ""
 
-    with signup_tab:
-        with st.form("signup_form", clear_on_submit=True):
-            new_username = st.text_input("Username", key="signup_username")
-            new_password = st.text_input(
-                "Password", type="password", key="signup_password"
-            )
-            signup_submit = st.form_submit_button("Create Account")
+        self.auth_frame = ttk.Frame(self, padding=16)
+        self.dashboard_frame = ttk.Frame(self, padding=16)
 
-        if signup_submit:
-            ok, message = create_user(new_username.strip(), new_password)
-            if ok:
-                st.success(message)
-            else:
-                st.error(message)
+        self._build_auth_frame()
+        self._build_dashboard_frame()
+        self.show_auth_frame()
 
-    with login_tab:
-        with st.form("login_form"):
-            username = st.text_input("Username", key="login_username")
-            password = st.text_input("Password", type="password", key="login_password")
-            login_submit = st.form_submit_button("Log In")
+    def _build_auth_frame(self) -> None:
+        ttk.Label(
+            self.auth_frame,
+            text="Create an account or log in to access your 2FA dashboard.",
+            wraplength=360,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
 
-        if login_submit:
-            if verify_user(username.strip(), password):
-                st.session_state.authenticated = True
-                st.session_state.username = username.strip()
-                st.success("Logged in successfully.")
-                st.rerun()
-            else:
-                st.error("Invalid username or password.")
+        notebook = ttk.Notebook(self.auth_frame)
+        notebook.pack(fill="both", expand=True)
 
+        signup_tab = ttk.Frame(notebook, padding=12)
+        login_tab = ttk.Frame(notebook, padding=12)
 
-def render_dashboard() -> None:
-    st.title("Dashboard")
-    st.write(f"Welcome, **{st.session_state.username}**")
+        notebook.add(signup_tab, text="Create Account")
+        notebook.add(login_tab, text="Log In")
 
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        security_key = st.text_input(
-            "Enter your TOTP security key",
-            help="Use a base32 key like one from Google Authenticator setup.",
+        self.signup_username_var = tk.StringVar()
+        self.signup_password_var = tk.StringVar()
+
+        ttk.Label(signup_tab, text="Username").pack(anchor="w")
+        ttk.Entry(signup_tab, textvariable=self.signup_username_var).pack(
+            fill="x", pady=(0, 10)
         )
-    with col2:
-        st.write("")
-        st.write("")
-        refresh_clicked = st.button("Refresh Code")
 
-    if security_key:
+        ttk.Label(signup_tab, text="Password").pack(anchor="w")
+        ttk.Entry(signup_tab, textvariable=self.signup_password_var, show="*").pack(
+            fill="x", pady=(0, 12)
+        )
+
+        ttk.Button(signup_tab, text="Create Account", command=self.handle_signup).pack(
+            anchor="e"
+        )
+
+        self.login_username_var = tk.StringVar()
+        self.login_password_var = tk.StringVar()
+
+        ttk.Label(login_tab, text="Username").pack(anchor="w")
+        ttk.Entry(login_tab, textvariable=self.login_username_var).pack(
+            fill="x", pady=(0, 10)
+        )
+
+        ttk.Label(login_tab, text="Password").pack(anchor="w")
+        ttk.Entry(login_tab, textvariable=self.login_password_var, show="*").pack(
+            fill="x", pady=(0, 12)
+        )
+
+        ttk.Button(login_tab, text="Log In", command=self.handle_login).pack(anchor="e")
+
+    def _build_dashboard_frame(self) -> None:
+        self.welcome_label = ttk.Label(self.dashboard_frame, text="")
+        self.welcome_label.pack(anchor="w", pady=(0, 12))
+
+        self.security_key_var = tk.StringVar()
+        ttk.Label(self.dashboard_frame, text="TOTP security key").pack(anchor="w")
+        ttk.Entry(self.dashboard_frame, textvariable=self.security_key_var).pack(
+            fill="x", pady=(0, 12)
+        )
+
+        button_row = ttk.Frame(self.dashboard_frame)
+        button_row.pack(fill="x", pady=(0, 12))
+        ttk.Button(button_row, text="Generate Code", command=self.handle_generate).pack(
+            side="left"
+        )
+        ttk.Button(button_row, text="Log Out", command=self.handle_logout).pack(
+            side="right"
+        )
+
+        self.code_label = ttk.Label(self.dashboard_frame, text="Current 2FA code: -")
+        self.code_label.pack(anchor="w", pady=(0, 6))
+
+        self.expires_label = ttk.Label(self.dashboard_frame, text="Code expires in: -")
+        self.expires_label.pack(anchor="w")
+
+    def show_auth_frame(self) -> None:
+        self.dashboard_frame.pack_forget()
+        self.auth_frame.pack(fill="both", expand=True)
+
+    def show_dashboard_frame(self) -> None:
+        self.auth_frame.pack_forget()
+        self.welcome_label.config(text=f"Welcome, {self.username}")
+        self.dashboard_frame.pack(fill="both", expand=True)
+
+    def handle_signup(self) -> None:
+        username = self.signup_username_var.get().strip()
+        password = self.signup_password_var.get()
+        ok, message = create_user(username, password)
+        if ok:
+            self.signup_password_var.set("")
+            messagebox.showinfo("Create Account", message)
+        else:
+            messagebox.showerror("Create Account", message)
+
+    def handle_login(self) -> None:
+        username = self.login_username_var.get().strip()
+        password = self.login_password_var.get()
+        if verify_user(username, password):
+            self.username = username
+            self.login_password_var.set("")
+            self.show_dashboard_frame()
+        else:
+            messagebox.showerror("Log In", "Invalid username or password.")
+
+    def handle_generate(self) -> None:
+        raw_key = self.security_key_var.get().strip()
+        if not raw_key:
+            messagebox.showerror("Generate Code", "Security key is required.")
+            return
+
         try:
-            totp = pyotp.TOTP(security_key.strip().replace(" ", ""))
+            totp = pyotp.TOTP(raw_key.replace(" ", ""))
             code = totp.now()
             seconds_left = 30 - (int(time.time()) % 30)
-
-            st.subheader("Current 2FA Code")
-            st.code(code, language="text")
-            st.info(f"Code expires in {seconds_left} seconds.")
-            st.progress(seconds_left / 30)
-
-            if refresh_clicked:
-                st.rerun()
+            self.code_label.config(text=f"Current 2FA code: {code}")
+            self.expires_label.config(text=f"Code expires in: {seconds_left} seconds")
         except Exception:
-            st.error("Invalid security key. Please enter a valid base32 key.")
+            messagebox.showerror(
+                "Generate Code", "Invalid security key. Please enter a valid base32 key."
+            )
 
-    if st.button("Log Out"):
-        st.session_state.authenticated = False
-        st.session_state.username = ""
-        st.rerun()
+    def handle_logout(self) -> None:
+        self.username = ""
+        self.security_key_var.set("")
+        self.code_label.config(text="Current 2FA code: -")
+        self.expires_label.config(text="Code expires in: -")
+        self.show_auth_frame()
 
 
 def main() -> None:
-    st.set_page_config(page_title="2FA App", page_icon="🔐", layout="centered")
-
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-    if "username" not in st.session_state:
-        st.session_state.username = ""
-
-    if st.session_state.authenticated:
-        render_dashboard()
-    else:
-        render_auth_page()
+    app = TwoFAApp()
+    app.mainloop()
 
 
 if __name__ == "__main__":
